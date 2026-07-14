@@ -1,3 +1,4 @@
+import { createPrivateKey } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { SignJWT, importPKCS8 } from "jose";
 
@@ -34,7 +35,11 @@ export function getAsaConfig(): AsaConfig | null {
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
 async function buildClientSecret(cfg: AsaConfig): Promise<string> {
-  const pem = readFileSync(cfg.privateKeyPath, "utf8");
+  let pem = readFileSync(cfg.privateKeyPath, "utf8");
+  // openssl ecparam emits SEC1 ("BEGIN EC PRIVATE KEY"); jose needs PKCS#8.
+  if (pem.includes("BEGIN EC PRIVATE KEY")) {
+    pem = createPrivateKey(pem).export({ type: "pkcs8", format: "pem" }).toString();
+  }
   const key = await importPKCS8(pem, "ES256");
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({})
