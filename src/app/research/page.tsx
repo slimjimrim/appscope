@@ -1,7 +1,5 @@
 import Link from "next/link";
 import { COUNTRIES, expandKeyword, extractKeywords, searchApps } from "@/lib/appstore";
-import { asaConfigured } from "@/lib/searchads";
-import { getSetting } from "@/lib/service";
 import { ScoreButton } from "@/components/ScoreButton";
 
 export const dynamic = "force-dynamic";
@@ -11,17 +9,13 @@ export default async function ResearchPage(props: {
 }) {
   const { term, country = "us" } = await props.searchParams;
 
-  const [suggestions, topApps, asaCookie] = await Promise.all([
+  const [suggestions, topApps] = await Promise.all([
     term ? expandKeyword(term, country) : Promise.resolve([]),
     term ? searchApps(term, country, 10) : Promise.resolve([]),
-    getSetting("asa_session_cookie"),
   ]);
   const competitorKeywords = topApps.length ? extractKeywords(topApps, 30) : [];
-  const scoreSource = asaCookie
-    ? "Apple Search Ads popularity"
-    : asaConfigured()
-      ? "difficulty heuristic (add your ASA session cookie in Settings for real popularity)"
-      : "difficulty heuristic (configure Apple Search Ads in Settings for real popularity)";
+  const scoreSource =
+    "pop = Apple Ads popularity (higher = more demand, green) · diff = top-10 entrenchment (lower = easier to rank, green)";
 
   return (
     <div>
@@ -46,7 +40,7 @@ export default async function ResearchPage(props: {
           Research
         </button>
       </form>
-      <p className="text-[12px] text-muted mb-6">Scores use: {scoreSource}.</p>
+      <p className="text-[12px] text-muted mb-6">{scoreSource}.</p>
 
       {term && (
         <div className="grid grid-cols-2 gap-5 items-start">

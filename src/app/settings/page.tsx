@@ -1,19 +1,21 @@
 import { asaConfigured } from "@/lib/searchads";
 import { getSetting } from "@/lib/service";
+import { AsaConnection } from "@/components/AsaConnection";
 import { SettingForm } from "@/components/SettingForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const cookie = await getSetting("asa_session_cookie");
   const officialConfigured = asaConfigured();
+  const mode = (process.env.ASA_SESSION_MODE ?? "playwright").toLowerCase();
+  const cookie = mode === "cookie" ? await getSetting("asa_session_cookie") : null;
 
   return (
     <div className="max-w-2xl">
       <h1 className="text-xl font-semibold tracking-tight mb-5">Settings</h1>
 
       <div className="card px-5 py-4 mb-5">
-        <div className="text-[13px] font-semibold mb-1">Apple Search Ads — official API</div>
+        <div className="text-[13px] font-semibold mb-1">Apple Ads — official API</div>
         <p className="text-[13px] text-ink-2 leading-relaxed mb-2">
           Status:{" "}
           {officialConfigured ? (
@@ -30,26 +32,30 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <div className="card px-5 py-4 flex flex-col gap-4">
-        <div>
-          <div className="text-[13px] font-semibold mb-1">
-            Apple Search Ads — popularity scores (dashboard session)
+      {mode === "cookie" ? (
+        <div className="card px-5 py-4 flex flex-col gap-4">
+          <div>
+            <div className="text-[13px] font-semibold mb-1">
+              Apple Ads — popularity scores (manual cookie)
+            </div>
+            <p className="text-[12.5px] text-muted leading-relaxed">
+              Log in to <code>app-ads.apple.com</code>, open DevTools → Network, copy the{" "}
+              <code>Cookie</code> header from any request, and paste it below. Set{" "}
+              <code>ASA_SESSION_MODE=playwright</code> in <code>.env.local</code> for an automatic
+              session that never needs re-pasting.
+            </p>
           </div>
-          <p className="text-[12.5px] text-muted leading-relaxed">
-            Keyword popularity (5–100) comes from the Apple Ads dashboard’s internal API. Log in
-            to <code>app-ads.apple.com</code>, open DevTools → Network, copy the{" "}
-            <code>Cookie</code> header from any request, and paste it below. When it expires or
-            is missing, research scores fall back to the local difficulty heuristic.
-          </p>
+          <SettingForm
+            settingKey="asa_session_cookie"
+            label="ASA session cookie"
+            placeholder="Paste the Cookie header value…"
+            hasValue={Boolean(cookie)}
+            textarea
+          />
         </div>
-        <SettingForm
-          settingKey="asa_session_cookie"
-          label="ASA session cookie"
-          placeholder="Paste the Cookie header value…"
-          hasValue={Boolean(cookie)}
-          textarea
-        />
-      </div>
+      ) : (
+        <AsaConnection />
+      )}
     </div>
   );
 }

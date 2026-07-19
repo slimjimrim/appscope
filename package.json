@@ -10,7 +10,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "snapshot": "tsx src/scripts/snapshot.ts",
-    "mcp": "tsx src/mcp/server.ts"
+    "mcp": "tsx src/mcp/server.ts",
+    "asa:login": "tsx src/scripts/asa-login.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -19,6 +20,7 @@
     "jose": "^6.2.3",
     "next": "16.2.10",
     "pg": "^8.22.0",
+    "playwright": "^1.61.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.9.2",

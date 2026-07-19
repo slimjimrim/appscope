@@ -46,9 +46,13 @@ npm run dev                            # http://localhost:3000
 1. ASA UI → Account Settings → API: create an API user, generate/upload an ES256 key pair
 2. Fill in `ASA_CLIENT_ID`, `ASA_TEAM_ID`, `ASA_KEY_ID`, `ASA_PRIVATE_KEY_PATH`, `ASA_ORG_ID`
    in `.env.local`
-3. For real popularity scores (5–100): log in to `app-ads.apple.com`, copy the `Cookie`
-   header from DevTools → Network, paste it in **Settings** in the app. Without it, research
-   scores use a local difficulty heuristic.
+3. For real popularity scores (5–100): AppScope keeps a persistent Apple Ads dashboard session
+   via a headless browser. Install the browser once with `npx playwright install chromium`, then
+   run `npm run asa:login` (or click **Connect Apple Ads** in Settings) and sign in with your
+   Apple ID + 2FA. The session persists at `~/.appscope/asa-browser` and stays authenticated
+   automatically — no cookie pasting. Without it, research scores fall back to a local difficulty
+   heuristic. (Set `ASA_SESSION_MODE=cookie` in `.env.local` to use the legacy manual-paste flow
+   instead, or `off` to always use the heuristic.)
 
 ### Daily snapshots
 
