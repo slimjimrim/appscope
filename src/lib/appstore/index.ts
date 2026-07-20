@@ -5,4 +5,5 @@ export * from "./charts";
 export * from "./hints";
 export * from "./keywords";
 export * from "./storefronts";
+export * from "./genres";
 export { cachedFetch, TTL } from "./client";

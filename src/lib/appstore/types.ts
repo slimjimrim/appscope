@@ -43,6 +43,8 @@ export interface ChartEntry {
   developer: string;
   artworkUrl: string;
   storeUrl: string;
+  /** Only populated by the legacy genre feed; overall charts leave it null. */
+  releaseDate?: string | null;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

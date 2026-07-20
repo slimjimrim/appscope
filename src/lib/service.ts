@@ -214,13 +214,18 @@ export async function recordRatingSnapshot(appId: number, country = "us") {
   return { rating: app.rating, ratingCount: app.ratingCount };
 }
 
-export async function recordChartSnapshot(country = "us", chart: ChartType = "top-free") {
-  const entries = await fetchTopChart(country, chart, 100);
+export async function recordChartSnapshot(
+  country = "us",
+  chart: ChartType = "top-free",
+  genreId?: number | null,
+) {
+  const entries = await fetchTopChart(country, chart, 100, genreId);
   if (entries.length === 0) return { count: 0 };
   await db.insert(tables.chartSnapshots).values(
     entries.map((e) => ({
       country,
       chartType: chart,
+      genreId: genreId ?? null,
       rank: e.rank,
       appId: e.appId,
       appName: e.name,
@@ -248,6 +253,52 @@ export async function ratingHistory(appId: number, country = "us", days = 180) {
     .orderBy(tables.ratingSnapshots.snapshotAt);
 }
 
+// ---------- seed terms & keyword opportunities ----------
+
+export async function listSeedTerms(country?: string) {
+  return db.query.seedTerms.findMany({
+    where: country ? eq(tables.seedTerms.country, country) : undefined,
+    orderBy: (t, { asc }) => [asc(t.term)],
+  });
+}
+
+export async function addSeedTerms(terms: string[], country = "us") {
+  const values = [...new Set(terms.map((t) => t.trim().toLowerCase()).filter(Boolean))].map(
+    (term) => ({ term, country }),
+  );
+  if (values.length === 0) return [];
+  return db.insert(tables.seedTerms).values(values).onConflictDoNothing().returning();
+}
+
+export async function removeSeedTerm(id: number) {
+  await db.delete(tables.seedTerms).where(eq(tables.seedTerms.id, id));
+}
+
+export interface OpportunityFilters {
+  country?: string;
+  minPopularity?: number;
+  maxDifficulty?: number;
+  /** Keep only rows carrying at least one of these flags. */
+  flags?: string[];
+  limit?: number;
+}
+
+export async function listKeywordOpportunities(f: OpportunityFilters = {}) {
+  const rows = await db.query.keywordOpportunities.findMany({
+    where: eq(tables.keywordOpportunities.country, f.country ?? "us"),
+    orderBy: (t, { desc }) => [desc(t.opportunityScore)],
+  });
+  // At most MAX_CANDIDATES rows per country, so filter in JS.
+  return rows
+    .filter((r) => f.minPopularity == null || (r.popularity ?? 0) >= f.minPopularity)
+    .filter((r) => f.maxDifficulty == null || r.difficulty <= f.maxDifficulty)
+    .filter(
+      (r) =>
+        !f.flags?.length || (r.flags as string[]).some((flag) => f.flags!.includes(flag)),
+    )
+    .slice(0, f.limit ?? 100);
+}
+
 // ---------- settings ----------
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -264,4 +315,20 @@ export async function setSetting(key: string, value: string) {
 
 export async function deleteSetting(key: string) {
   await db.delete(tables.settings).where(eq(tables.settings.key, key));
+}
+
+/** Genre ids captured by the daily chart snapshot (JSON array in settings). */
+export async function getSnapshotGenres(): Promise<number[]> {
+  const raw = await getSetting("snapshot_genres");
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(Number).filter(Number.isFinite) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function setSnapshotGenres(genreIds: number[]) {
+  await setSetting("snapshot_genres", JSON.stringify([...new Set(genreIds)].sort((a, b) => a - b)));
 }

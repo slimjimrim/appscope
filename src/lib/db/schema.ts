@@ -87,12 +87,54 @@ export const chartSnapshots = pgTable(
     id: serial("id").primaryKey(),
     country: text("country").notNull(),
     chartType: text("chart_type").notNull(), // top-free | top-paid
+    // null = overall chart; otherwise an App Store genre id (see appstore/genres.ts)
+    genreId: integer("genre_id"),
     rank: integer("rank").notNull(),
     appId: bigint("app_id", { mode: "number" }).notNull(),
     appName: text("app_name").notNull(),
     snapshotAt: timestamp("snapshot_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("chart_snapshots_country_type_time").on(t.country, t.chartType, t.snapshotAt)],
+  (t) => [
+    index("chart_snapshots_country_type_time").on(t.country, t.chartType, t.snapshotAt),
+    index("chart_snapshots_genre").on(t.country, t.chartType, t.genreId, t.snapshotAt),
+  ],
+);
+
+export const seedTerms = pgTable(
+  "seed_terms",
+  {
+    id: serial("id").primaryKey(),
+    term: text("term").notNull(),
+    country: text("country").notNull().default("us"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("seed_terms_term_country").on(t.term, t.country)],
+);
+
+export const keywordOpportunities = pgTable(
+  "keyword_opportunities",
+  {
+    id: serial("id").primaryKey(),
+    term: text("term").notNull(),
+    country: text("country").notNull().default("us"),
+    // "seed" | "seed-expansion" | "tracked-keyword" | "app-name" | "competitor-metadata"
+    source: text("source").notNull(),
+    // null = ASA session unavailable (heuristic-only scan)
+    popularity: real("popularity"),
+    difficulty: real("difficulty").notNull(),
+    opportunityScore: real("opportunity_score").notNull(),
+    // best rank among tracked apps; null = none in top 200
+    bestRank: integer("best_rank"),
+    bestRankAppId: bigint("best_rank_app_id", { mode: "number" }),
+    top10Stats: jsonb("top10_stats"),
+    // string[]: "low-competition" | "ranking-gap" | "weak-incumbents"
+    flags: jsonb("flags").notNull(),
+    scannedAt: timestamp("scanned_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("keyword_opportunities_term_country").on(t.term, t.country),
+    index("keyword_opportunities_country_score").on(t.country, t.opportunityScore),
+  ],
 );
 
 export const reviews = pgTable(

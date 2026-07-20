@@ -224,14 +224,141 @@ async function main() {
   server.registerTool(
     "get_top_charts",
     {
-      description: "Current App Store top charts (top-free or top-paid) for a country.",
+      description:
+        "Current App Store top charts (top-free or top-paid) for a country, optionally scoped to a category via genreId (Apple genre id, e.g. 6013 = Health & Fitness; see find_chart_opportunities for the full list).",
       inputSchema: {
         country: z.string().default("us"),
         chart: z.enum(["top-free", "top-paid"]).default("top-free"),
         limit: z.number().default(50),
+        genreId: z.number().optional().describe("Apple genre id for category charts"),
       },
     },
-    async ({ country, chart, limit }) => json(await appstore.fetchTopChart(country, chart, limit)),
+    async ({ country, chart, limit, genreId }) =>
+      json(await appstore.fetchTopChart(country, chart, limit, genreId)),
+  );
+
+  server.registerTool(
+    "find_keyword_opportunities",
+    {
+      description:
+        "Keyword opportunities from the last daily scan: auto-discovered + seeded terms scored with ASA popularity (5-100, null = Apple Ads session not connected), difficulty (0-100), an opportunity score (0-100, higher = better), best tracked-app rank, and flags: low-competition (pop>=40 & diff<=40), ranking-gap (popular but your app ranks >20 or not at all), weak-incumbents (>=4 of top 10 poorly rated). Data refreshes via run_snapshot.",
+      inputSchema: {
+        country: z.string().default("us"),
+        minPopularity: z.number().optional(),
+        maxDifficulty: z.number().optional(),
+        flags: z
+          .array(z.enum(["low-competition", "ranking-gap", "weak-incumbents"]))
+          .optional()
+          .describe("keep only rows with at least one of these flags"),
+        limit: z.number().default(25),
+      },
+    },
+    async ({ country, minPopularity, maxDifficulty, flags, limit }) => {
+      const rows = await service.listKeywordOpportunities({
+        country,
+        minPopularity,
+        maxDifficulty,
+        flags,
+        limit,
+      });
+      return json(
+        rows.map((r) => ({
+          term: r.term,
+          popularity: r.popularity,
+          difficulty: r.difficulty,
+          opportunityScore: r.opportunityScore,
+          bestRank: r.bestRank,
+          flags: r.flags,
+          top10Stats: r.top10Stats,
+          source: r.source,
+          scannedAt: r.scannedAt,
+        })),
+      );
+    },
+  );
+
+  server.registerTool(
+    "find_chart_opportunities",
+    {
+      description:
+        "Live top chart (optionally category-scoped via genreId) enriched with ratings and opportunity flags: weak-incumbent (charting with rating <4.0 — proven demand, unhappy users), fast-climber (up 20+ positions vs a ~7-day-old snapshot; needs snapshot history), new-entrant (released <90 days ago, in top 100). Cold call costs ~2 rate-limited requests (~7s), then cached 6-12h. Genre ids: " +
+        Object.entries(appstore.GENRES)
+          .map(([id, name]) => `${id}=${name}`)
+          .join(", "),
+      inputSchema: {
+        country: z.string().default("us"),
+        chart: z.enum(["top-free", "top-paid"]).default("top-free"),
+        genreId: z.number().optional(),
+        flags: z
+          .array(z.enum(["weak-incumbent", "fast-climber", "new-entrant"]))
+          .optional()
+          .describe("keep only apps with at least one of these flags"),
+        limit: z.number().default(100),
+      },
+    },
+    async ({ country, chart, genreId, flags, limit }) => {
+      const { getChartOpportunities } = await import("../lib/opportunities");
+      const { entries, baselineAt } = await getChartOpportunities(
+        country,
+        chart,
+        genreId ?? null,
+        limit,
+      );
+      const filtered = flags?.length
+        ? entries.filter((e) => e.flags.some((f) => flags.includes(f)))
+        : entries;
+      return json({
+        baselineAt,
+        baselineNote:
+          baselineAt == null
+            ? "no snapshot history yet for this chart — fast-climber detection unavailable"
+            : undefined,
+        entries: filtered.map((e) => ({
+          rank: e.rank,
+          appId: e.appId,
+          name: e.name,
+          developer: e.developer,
+          rating: e.rating,
+          ratingCount: e.ratingCount,
+          releaseDate: e.releaseDate,
+          previousRank: e.previousRank,
+          delta: e.delta,
+          flags: e.flags,
+        })),
+      });
+    },
+  );
+
+  server.registerTool(
+    "seed_terms",
+    {
+      description:
+        "Manage manual seed terms for the daily keyword-opportunity scan (they get autocomplete-expanded and scored alongside auto-discovered terms). action=list|add|remove; add needs terms, remove accepts terms to delete by name.",
+      inputSchema: {
+        action: z.enum(["list", "add", "remove"]).default("list"),
+        terms: z.array(z.string()).optional(),
+        country: z.string().default("us"),
+      },
+    },
+    async ({ action, terms, country }) => {
+      if (action === "add") {
+        const created = await service.addSeedTerms(terms ?? [], country);
+        return json({ added: created.map((c) => c.term) });
+      }
+      if (action === "remove") {
+        const existing = await service.listSeedTerms(country);
+        const wanted = new Set((terms ?? []).map((t) => t.trim().toLowerCase()));
+        const removed = [];
+        for (const s of existing) {
+          if (wanted.has(s.term)) {
+            await service.removeSeedTerm(s.id);
+            removed.push(s.term);
+          }
+        }
+        return json({ removed });
+      }
+      return json(await service.listSeedTerms(country));
+    },
   );
 
   server.registerTool(
@@ -251,7 +378,7 @@ async function main() {
     "run_snapshot",
     {
       description:
-        "Run a full snapshot pass now (keyword ranks, ratings, new reviews, charts for all tracked apps). Takes ~3s per keyword due to Apple rate limits.",
+        "Run a full snapshot pass now (keyword ranks, ratings, new reviews, charts + configured category charts, and the keyword-opportunity scan). Takes ~3s per keyword/candidate due to Apple rate limits — a full pass can run several minutes.",
       inputSchema: {},
     },
     async () => {

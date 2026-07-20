@@ -96,12 +96,13 @@ export interface DifficultyResult {
 }
 
 /**
- * Difficulty heuristic when no ASA popularity is available: how entrenched are
- * the current top 10? Based on the median rating count (log scale — 1M-review
+ * Difficulty heuristic from a search-result set: how entrenched are the
+ * current top 10? Based on the median rating count (log scale — 1M-review
  * incumbents ≈ 100) blended with their average star rating.
  */
-export async function keywordDifficulty(term: string, country = "us"): Promise<DifficultyResult> {
-  const results = await searchApps(term, country, 50);
+export function difficultyFromResults(
+  results: AppSummary[],
+): Omit<DifficultyResult, "term" | "country"> {
   const top10 = results.slice(0, 10);
   const counts = top10.map((a) => a.ratingCount ?? 0).sort((x, y) => x - y);
   const median = counts.length ? counts[Math.floor(counts.length / 2)] : 0;
@@ -116,11 +117,14 @@ export async function keywordDifficulty(term: string, country = "us"): Promise<D
   const score = Math.round(volumeScore * 0.75 + qualityScore * 0.25);
 
   return {
-    term,
-    country,
     score,
     medianRatingCount: median,
     avgRating: Number(avgRating.toFixed(2)),
     totalResults: results.length,
   };
+}
+
+export async function keywordDifficulty(term: string, country = "us"): Promise<DifficultyResult> {
+  const results = await searchApps(term, country, 50);
+  return { term, country, ...difficultyFromResults(results) };
 }

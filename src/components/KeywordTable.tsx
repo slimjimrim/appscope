@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useState, useTransition } from "react";
+import { Delta } from "./Delta";
 import {
   CartesianGrid,
   Line,
@@ -20,17 +21,6 @@ export interface KeywordRow {
   latestRank: number | null;
   latestCheckedAt: string | null;
   previousRank: number | null;
-}
-
-function Delta({ current, previous }: { current: number | null; previous: number | null }) {
-  if (current == null || previous == null || current === previous)
-    return <span className="text-muted">·</span>;
-  const improved = current < previous; // lower rank number = better
-  return (
-    <span style={{ color: improved ? "var(--good)" : "var(--bad)" }} className="tabular text-[12px]">
-      {improved ? "▲" : "▼"} {Math.abs(current - previous)}
-    </span>
-  );
 }
 
 function RankChart({ keywordId }: { keywordId: number }) {

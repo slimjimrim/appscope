@@ -2,11 +2,13 @@ import { eq } from "drizzle-orm";
 import { db, tables } from "./db";
 import {
   checkKeyword,
+  getSnapshotGenres,
   listTrackedApps,
   recordChartSnapshot,
   recordRatingSnapshot,
   syncReviews,
 } from "./service";
+import { runOpportunityScan } from "./opportunities";
 
 /**
  * One full snapshot pass over every tracked app: keyword ranks, current
@@ -47,6 +49,7 @@ export async function runSnapshot(log: (line: string) => void = () => {}) {
     }
   }
 
+  const genres = await getSnapshotGenres();
   const countries = [...new Set(apps.map((a) => a.country))];
   for (const country of countries.length ? countries : ["us"]) {
     for (const chart of ["top-free", "top-paid"] as const) {
@@ -56,6 +59,20 @@ export async function runSnapshot(log: (line: string) => void = () => {}) {
       } catch (err) {
         log(`charts · ${country}/${chart} failed: ${err}`);
       }
+      for (const genreId of genres) {
+        try {
+          const { count } = await recordChartSnapshot(country, chart, genreId);
+          log(`charts · ${country}/${chart}/genre ${genreId}: ${count} entries`);
+        } catch (err) {
+          log(`charts · ${country}/${chart}/genre ${genreId} failed: ${err}`);
+        }
+      }
+    }
+
+    try {
+      await runOpportunityScan(country, log);
+    } catch (err) {
+      log(`opportunities · ${country} scan failed: ${err}`);
     }
   }
 
